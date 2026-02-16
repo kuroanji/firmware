@@ -13,6 +13,15 @@ using namespace NicheGraphics;
 InkHUD::AppletFont InkHUD::Applet::fontLarge; // General purpose fonts. Set in nicheGraphics.h
 InkHUD::AppletFont InkHUD::Applet::fontMedium;
 InkHUD::AppletFont InkHUD::Applet::fontSmall;
+
+// Helper function to get a pixel from CJK bitmap
+static inline uint8_t getCJKPixel(const uint8_t *bitmap, uint32_t bitmapOffset, uint8_t w, uint8_t col, uint8_t row)
+{
+    uint16_t bitIndex = (uint16_t)row * w + col;
+    uint32_t byteIndex = bitmapOffset + (bitIndex / 8);
+    uint8_t bitMask = 0x80 >> (bitIndex % 8);
+    return (pgm_read_byte(&bitmap[byteIndex]) & bitMask) ? 1 : 0;
+}
 constexpr float InkHUD::Applet::LOGO_ASPECT_RATIO; // Ratio of the Meshtastic logo
 
 InkHUD::Applet::Applet() : GFX(0, 0)
@@ -35,6 +44,31 @@ void InkHUD::Applet::drawPixel(int16_t x, int16_t y, uint16_t color)
     // Only render pixels if they fall within user's cropped region
     if (x >= cropLeft && x < (cropLeft + cropWidth) && y >= cropTop && y < (cropTop + cropHeight))
         assignedTile->handleAppletPixel(x, y, (Color)color);
+}
+
+// CJK-aware character output
+// Intercepts escape sequences and renders CJK glyphs
+size_t InkHUD::Applet::write(uint8_t c)
+{
+    // State machine for CJK escape sequence: ESC + high + low
+    if (cjkEscState == 0) {
+        if (c == 0x1B && currentFont.cjkFont != nullptr) {
+            cjkEscState = 1;
+            return 1;
+        }
+        return GFX::write(c);
+    }
+    if (cjkEscState == 1) {
+        cjkHighByte = c;
+        cjkEscState = 2;
+        return 1;
+    }
+    // Got both bytes, render the CJK glyph
+    uint16_t glyphIndex = (uint16_t)(cjkHighByte - 1) * 254 + (c - 1);
+    drawCJKGlyph(getCursorX(), getCursorY(), glyphIndex);
+    setCursor(getCursorX() + (int16_t)(currentFont.cjkFont->xAdvance * currentFont.cjkScale + 0.5f), getCursorY());
+    cjkEscState = 0;
+    return 1;
 }
 
 // Link our applet to a tile
@@ -278,6 +312,10 @@ void InkHUD::Applet::printAt(int16_t x, int16_t y, const char *text, HorizontalA
     uint16_t textWidth, textHeight;
     getTextBounds(text, 0, 0, &textOffsetX, &textOffsetY, &textWidth, &textHeight);
 
+    // Use CJK-aware width calculation if CJK font is active
+    if (currentFont.cjkFont)
+        textWidth = getMixedTextWidth(text);
+
     int16_t cursorX = 0;
     int16_t cursorY = 0;
 
@@ -390,6 +428,90 @@ uint16_t InkHUD::Applet::getTextWidth(const char *text)
 uint16_t InkHUD::Applet::getTextWidth(std::string text)
 {
     return getTextWidth(text.c_str());
+}
+
+// Width calculation for mixed ASCII/CJK text with escape sequences
+uint16_t InkHUD::Applet::getMixedTextWidth(const char *text)
+{
+    if (!currentFont.cjkFont)
+        return getTextWidth(text);
+
+    uint16_t totalWidth = 0;
+    std::string normalChars;
+    const char *p = text;
+
+    while (*p) {
+        if ((uint8_t)*p == 0x1B && *(p + 1) && *(p + 2)) {
+            // Found CJK escape sequence
+            if (!normalChars.empty()) {
+                totalWidth += getTextWidth(normalChars);
+                normalChars.clear();
+            }
+            totalWidth += (uint16_t)(currentFont.cjkFont->xAdvance * currentFont.cjkScale + 0.5f);
+            p += 3; // Skip ESC + high + low
+        } else {
+            normalChars += *p;
+            p++;
+        }
+    }
+    if (!normalChars.empty())
+        totalWidth += getTextWidth(normalChars);
+    return totalWidth;
+}
+
+// Render a CJK glyph with bilinear scaling
+void InkHUD::Applet::drawCJKGlyph(int16_t x, int16_t y, uint16_t glyphIndex)
+{
+    const NicheGraphics::CJKFont *font = currentFont.cjkFont;
+    if (!font || glyphIndex >= font->glyphCount)
+        return;
+
+    uint32_t bitmapOffset = pgm_read_dword(&font->glyphs[glyphIndex].bitmapOffset);
+    uint8_t srcW = font->width;
+    uint8_t srcH = font->height;
+    int8_t yOff = font->yOffset;
+    float scale = currentFont.cjkScale;
+
+    uint8_t destW = (uint8_t)(srcW * scale + 0.5f);
+    uint8_t destH = (uint8_t)(srcH * scale + 0.5f);
+    int16_t drawY = y + (int16_t)(yOff * scale);
+
+    // Fast path: native size (no scaling needed)
+    if (scale >= 0.99f && scale <= 1.01f) {
+        for (uint8_t row = 0; row < srcH; row++) {
+            for (uint8_t col = 0; col < srcW; col++) {
+                if (getCJKPixel(font->bitmap, bitmapOffset, srcW, col, row))
+                    drawPixel(x + col, drawY + row, BLACK);
+            }
+        }
+        return;
+    }
+
+    // Bilinear interpolation for scaling
+    for (uint8_t dy = 0; dy < destH; dy++) {
+        float srcY = dy / scale;
+        uint8_t y0 = (uint8_t)srcY;
+        uint8_t y1 = (y0 + 1 < srcH) ? y0 + 1 : y0;
+        float fy = srcY - y0;
+
+        for (uint8_t dx = 0; dx < destW; dx++) {
+            float srcX = dx / scale;
+            uint8_t x0 = (uint8_t)srcX;
+            uint8_t x1 = (x0 + 1 < srcW) ? x0 + 1 : x0;
+            float fx = srcX - x0;
+
+            // Sample 4 neighboring pixels
+            uint8_t p00 = getCJKPixel(font->bitmap, bitmapOffset, srcW, x0, y0);
+            uint8_t p10 = getCJKPixel(font->bitmap, bitmapOffset, srcW, x1, y0);
+            uint8_t p01 = getCJKPixel(font->bitmap, bitmapOffset, srcW, x0, y1);
+            uint8_t p11 = getCJKPixel(font->bitmap, bitmapOffset, srcW, x1, y1);
+
+            // Bilinear interpolation
+            float val = (1-fx)*(1-fy)*p00 + fx*(1-fy)*p10 + (1-fx)*fy*p01 + fx*fy*p11;
+            if (val > 0.5f)
+                drawPixel(x + dx, drawY + dy, BLACK);
+        }
+    }
 }
 
 // Evaluate SNR and RSSI to qualify signal strength at one of four discrete levels
