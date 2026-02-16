@@ -55,6 +55,15 @@ InkHUD::AppletFont::AppletFont(const GFXfont &adafruitGFXFont, Encoding encoding
     spaceCharWidth = gfxFont->glyph[(uint8_t)' ' - gfxFont->first].xAdvance;
 }
 
+// Constructor with CJK font support
+InkHUD::AppletFont::AppletFont(const GFXfont &adafruitGFXFont, Encoding encoding, int8_t paddingTop, int8_t paddingBottom,
+                                const NicheGraphics::CJKFont *cjkFont, float cjkScale)
+    : AppletFont(adafruitGFXFont, encoding, paddingTop, paddingBottom)
+{
+    this->cjkFont = cjkFont;
+    this->cjkScale = cjkScale;
+}
+
 /*
 
              ▲    #####  #         ▲
@@ -165,7 +174,22 @@ std::string InkHUD::AppletFont::decodeUTF8(std::string encoded)
 
         // Now collected all bytes for this char
         // Remap the value to match the encoding of our 8-bit AppletFont
-        decoded += applyEncoding(utf8Char);
+        char mapped = applyEncoding(utf8Char);
+
+        // CJK escape encoding: if character wasn't mapped and we have a CJK font
+        if (mapped == '\x1A' && encoding == JAPANESE && cjkFont != nullptr && utf8Char.length() > 1) {
+            uint32_t cp = toUtf32(utf8Char);
+            int16_t glyphIdx = NicheGraphics::cjkLookup(cjkFont, (uint16_t)cp);
+            if (glyphIdx >= 0) {
+                // Encode as 3-byte escape sequence: ESC + high + low
+                decoded += '\x1B';
+                decoded += (char)((glyphIdx / 254) + 1);
+                decoded += (char)((glyphIdx % 254) + 1);
+                mapped = 0; // Don't add the SUB character
+            }
+        }
+        if (mapped != 0)
+            decoded += mapped;
 
         // Reset, ready to build next UTF-8 char from the encoded bytes
         utf8Char.clear();
@@ -328,9 +352,9 @@ char InkHUD::AppletFont::applyEncoding(std::string utf8)
         }
     }
 
-    // Latin - Cyrillic
+    // Latin - Cyrillic (also used as base for JAPANESE)
     // https://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/WINDOWS/CP1251.TXT
-    else if (encoding == WINDOWS_1251) {
+    else if (encoding == WINDOWS_1251 || encoding == JAPANESE) {
         // 1-Byte chars: no remapping
         if (utf8.length() == 1)
             return utf8.at(0);
