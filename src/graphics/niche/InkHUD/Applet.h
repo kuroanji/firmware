@@ -109,6 +109,9 @@ class Applet : public GFX
 
     const char *name = nullptr; // Shown in applet selection menu. Also used as an identifier by InkHUD::getSystemApplet
 
+    // CJK support
+    size_t write(uint8_t c) override; // Override to intercept CJK escape sequences
+
   protected:
     void drawPixel(int16_t x, int16_t y, uint16_t color) override; // Place a single pixel. All drawing output passes through here
 
@@ -127,6 +130,8 @@ class Applet : public GFX
     AppletFont getFont();
     uint16_t getTextWidth(std::string text);
     uint16_t getTextWidth(const char *text);
+    uint16_t getMixedTextWidth(const char *text); // Width calculation for mixed ASCII/CJK text
+    void drawCJKGlyph(int16_t x, int16_t y, uint16_t glyphIndex); // Render a CJK glyph with bilinear scaling
     uint32_t getWrappedTextHeight(int16_t left, uint16_t width, std::string text); // Result of printWrapped
     void printAt(int16_t x, int16_t y, const char *text, HorizontalAlignment ha = LEFT, VerticalAlignment va = TOP);
     void printAt(int16_t x, int16_t y, std::string text, HorizontalAlignment ha = LEFT, VerticalAlignment va = TOP);
@@ -175,6 +180,10 @@ class Applet : public GFX
     using GFX::setRotation; // Block setRotation calls. Rotation is handled globally by WindowManager.
 
     AppletFont currentFont; // As passed to setFont
+
+    // CJK escape sequence state machine
+    uint8_t cjkEscState = 0;  // 0=normal, 1=got ESC, 2=got high byte
+    uint8_t cjkHighByte = 0;  // High byte of glyph index
 
     // As set by setCrop
     int16_t cropLeft = 0;
