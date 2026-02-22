@@ -102,6 +102,12 @@ static constexpr const char *configFileName = "/prefs/config.proto";
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 static constexpr const char *channelFileName = "/prefs/channels.proto";
+
+// Backup files with rotation for reliability
+static constexpr const char *autoBackupFileName = "/backups/auto_backup.proto";      // Latest auto-backup
+static constexpr const char *autoBackupPrevFileName = "/backups/auto_backup_prev.proto"; // Previous auto-backup (rotation)
+static constexpr const char *userBackupFileName = "/backups/user_backup.proto";      // Manual "golden" backup
+// Legacy backup file (for migration)
 static constexpr const char *backupFileName = "/backups/backup.proto";
 
 /// Given a node, return how many seconds in the past (vs now) that we last heard from it
@@ -296,6 +302,7 @@ class NodeDB
 #endif
 
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
+    // Note: SD location = user backup (golden snapshot), FLASH = auto backup with rotation
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
 
