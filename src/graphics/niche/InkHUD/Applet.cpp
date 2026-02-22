@@ -64,7 +64,8 @@ size_t InkHUD::Applet::write(uint8_t c)
         return 1;
     }
     // Got both bytes, render the CJK glyph
-    uint16_t glyphIndex = (uint16_t)(cjkHighByte - 1) * 254 + (c - 1);
+    // Decode: base 223 with offset 0x21
+    uint16_t glyphIndex = (uint16_t)(cjkHighByte - 0x21) * 223 + (c - 0x21);
     drawCJKGlyph(getCursorX(), getCursorY(), glyphIndex);
     setCursor(getCursorX() + (int16_t)(currentFont.cjkFont->xAdvance * currentFont.cjkScale + 0.5f), getCursorY());
     cjkEscState = 0;
