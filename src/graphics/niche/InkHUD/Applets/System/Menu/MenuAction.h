@@ -115,6 +115,10 @@ enum MenuAction {
     // Administration
     RESET_NODEDB_ALL,
     RESET_NODEDB_KEEP_FAVORITES,
+    // Backup / Restore
+    BACKUP_AUTO,
+    BACKUP_USER,
+    RESTORE_PREFERENCES,
 };
 
 } // namespace NicheGraphics::InkHUD
