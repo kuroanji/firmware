@@ -863,6 +863,33 @@ void InkHUD::MenuApplet::execute(MenuItem item)
         rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
         break;
 
+    case BACKUP_AUTO:
+        if (nodeDB->backupPreferences(meshtastic_AdminMessage_BackupLocation_FLASH)) {
+            LOG_INFO("Auto backup created from menu");
+        } else {
+            LOG_ERROR("Auto backup failed");
+        }
+        break;
+
+    case BACKUP_USER:
+        // SD location = user backup (golden snapshot)
+        if (nodeDB->backupPreferences(meshtastic_AdminMessage_BackupLocation_SD)) {
+            LOG_INFO("User backup created from menu");
+        } else {
+            LOG_ERROR("User backup failed");
+        }
+        break;
+
+    case RESTORE_PREFERENCES:
+        InkHUD::getInstance()->notifyApplyingChanges();
+        if (nodeDB->restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH)) {
+            LOG_INFO("Preferences restored from menu");
+            rebootAtMsec = millis() + DEFAULT_REBOOT_SECONDS * 1000;
+        } else {
+            LOG_ERROR("Restore failed - no backup found");
+        }
+        break;
+
     default:
         LOG_WARN("Action not implemented");
     }
@@ -974,6 +1001,7 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
 
         // Administration Section
         items.push_back(MenuItem::Header("Administration"));
+        items.push_back(MenuItem("Backup/Restore", MenuPage::NODE_CONFIG_BACKUP));
         items.push_back(MenuItem("Reset NodeDB", MenuPage::NODE_CONFIG_ADMIN_RESET));
 
         // Exit
@@ -1350,6 +1378,18 @@ void InkHUD::MenuApplet::showPage(MenuPage page)
         items.push_back(MenuItem("Exit", MenuPage::EXIT));
         break;
     }
+    // Backup / Restore Section
+    case NODE_CONFIG_BACKUP:
+        previousPage = MenuPage::NODE_CONFIG;
+        items.push_back(MenuItem("Back", previousPage));
+        items.push_back(MenuItem::Header("Create Backup"));
+        items.push_back(MenuItem("Auto Backup", MenuAction::BACKUP_AUTO, MenuPage::NODE_CONFIG_BACKUP));
+        items.push_back(MenuItem("User Backup", MenuAction::BACKUP_USER, MenuPage::NODE_CONFIG_BACKUP));
+        items.push_back(MenuItem::Header("Restore"));
+        items.push_back(MenuItem("Restore Settings", MenuAction::RESTORE_PREFERENCES, MenuPage::EXIT));
+        items.push_back(MenuItem("Exit", MenuPage::EXIT));
+        break;
+
     // Administration Section
     case NODE_CONFIG_ADMIN_RESET:
         previousPage = MenuPage::NODE_CONFIG;
