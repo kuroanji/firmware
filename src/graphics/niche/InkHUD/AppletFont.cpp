@@ -182,9 +182,10 @@ std::string InkHUD::AppletFont::decodeUTF8(std::string encoded)
             int16_t glyphIdx = NicheGraphics::cjkLookup(cjkFont, (uint16_t)cp);
             if (glyphIdx >= 0) {
                 // Encode as 3-byte escape sequence: ESC + high + low
+                // Use base 223 with offset 0x21 to avoid control chars (0x00-0x20)
                 decoded += '\x1B';
-                decoded += (char)((glyphIdx / 254) + 1);
-                decoded += (char)((glyphIdx % 254) + 1);
+                decoded += (char)((glyphIdx / 223) + 0x21);
+                decoded += (char)((glyphIdx % 223) + 0x21);
                 mapped = 0; // Don't add the SUB character
             }
         }
