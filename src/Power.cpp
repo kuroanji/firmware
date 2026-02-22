@@ -808,6 +808,10 @@ void Power::shutdown()
     playShutdownMelody();
 #endif
     nodeDB->saveToDisk();
+    // Create automatic backup on graceful shutdown
+    if (nodeDB->backupPreferences(meshtastic_AdminMessage_BackupLocation_FLASH)) {
+        LOG_INFO("Auto backup created on shutdown");
+    }
 #if HAS_SCREEN
     messageStore.saveToFlash();
 #endif
