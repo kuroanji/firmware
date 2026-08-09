@@ -34,6 +34,12 @@ cherry-port our layer file-by-file, fixing base-API drift as it surfaces.
   (corruptSettingsMask in loadFromDisk, T1000-E self-heal) + faithful position projection
   in backupNodeDatabase still TODO.
 
+## DONE ✅ (cont.) — ALL 8 InkHUD2 targets build @ commit f9bc10956
+- esp32s3: heltec e290, e213, wireless-paper — SUCCESS.
+- nrf52840: t-echo, t-echo-plus, mesh-pocket, thinknode-m1 — SUCCESS.
+- Motion fix: ported our `MMC5983MA __has_include` guard in `MagnetometerThread.h`;
+  kept `AccelerometerThread.h` UPSTREAM (it gained `providesHeading` — do NOT replace with ours).
+
 ## TODO (ordered)
 1. **backup/restore** → merge into 6eac181 NodeDB: `backupNodeDatabase()`, `corruptSettingsMask`,
    auto boot-restore in `loadFromDisk`. (task #3)

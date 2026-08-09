@@ -361,6 +361,46 @@ void printInfo()
 {
     LOG_INFO("S:B:%d,%s,%s,%s", HW_VENDOR, optstr(APP_VERSION), optstr(APP_ENV), optstr(APP_REPO));
 }
+
+#if defined(TRACKER_T1000_E) && defined(PIN_WIRE_SDA) && defined(PIN_WIRE_SCL)
+// I2C bus recovery for nRF52. The Adafruit TwoWire::endTransmission() spins in an
+// unbounded `while(!EVENTS_STOPPED)` loop, so a slave left holding SDA low (e.g. a
+// transaction interrupted by a reset/reflash) hangs the boot-time i2c scan forever —
+// the documented T1000-E boot-loop (meshtastic/firmware#4615). Before Wire.begin()
+// claims the pins, if SDA is stuck low we bit-bang up to 9 SCL pulses (letting the
+// slave clock out its byte and release SDA) then issue a STOP. No-op on a healthy bus.
+// Returns true if the bus is usable (SDA released high), false if still wedged — the
+// caller then skips the scan so the device still boots (BT/serial) without i2c sensors.
+static bool i2cBusRecover(uint8_t sdaPin, uint8_t sclPin)
+{
+    pinMode(sdaPin, INPUT_PULLUP);
+    pinMode(sclPin, INPUT_PULLUP);
+    delayMicroseconds(10);
+    if (digitalRead(sdaPin) != LOW)
+        return true; // bus idle, nothing stuck
+
+    LOG_WARN("I2C bus stuck (SDA held low) - attempting clock-pulse recovery");
+    for (int i = 0; i < 9 && digitalRead(sdaPin) == LOW; i++) {
+        pinMode(sclPin, OUTPUT);
+        digitalWrite(sclPin, LOW); // drive SCL low
+        delayMicroseconds(5);
+        pinMode(sclPin, INPUT_PULLUP); // release SCL high (emulated open-drain)
+        delayMicroseconds(5);
+    }
+    // STOP condition: SDA transitions low->high while SCL is high.
+    pinMode(sdaPin, OUTPUT);
+    digitalWrite(sdaPin, LOW);
+    delayMicroseconds(5);
+    pinMode(sclPin, INPUT_PULLUP); // SCL high
+    delayMicroseconds(5);
+    pinMode(sdaPin, INPUT_PULLUP); // release SDA high while SCL high = STOP
+    delayMicroseconds(5);
+    bool usable = digitalRead(sdaPin) == HIGH;
+    LOG_INFO("I2C bus recovery done (SDA now %s)", usable ? "released" : "STILL STUCK");
+    return usable;
+}
+#endif
+
 #ifndef PIO_UNIT_TESTING
 void setup()
 {
@@ -573,6 +613,37 @@ void setup()
 #endif
 
 #if !MESHTASTIC_EXCLUDE_I2C
+#if defined(TRACKER_T1000_E) && defined(PIN_WIRE_SDA) && defined(PIN_WIRE_SCL)
+    // A QMA6100P wedged mid-transaction holds SDA low and hangs the boot i2c scan
+    // (meshtastic/firmware#4615). The sensor is battery-powered, so a warm MCU reset
+    // never clears it — hence the boot-loop that survives resets. Hard power-cycle the
+    // sensor rail(s) to force a clean chip reset (the only reliable fix), then clock-pulse
+    // the bus as a fallback; if it is STILL stuck, skip the scan so the device still boots.
+    // Deliberately a GENTLE cut (rails only, bus lines left alone). A healthy sensor comes
+    // back cleanly and the scan then runs normally, restoring the accelerometer. A hardware-
+    // wedged sensor keeps holding SDA low even after this power-cycle — i2cBusRecover()
+    // reports it still stuck and we skip the scan (Wire's endTransmission would otherwise
+    // hang forever). Do NOT ground SDA/SCL during the cut: that half-revives a marginal
+    // sensor into a state that reads healthy at idle yet still hangs the TWIM scan, defeating
+    // the skip. Leaving it cleanly wedged keeps "SDA still low -> skip" reliable.
+#ifdef PIN_3V3_EN
+    pinMode(PIN_3V3_EN, OUTPUT);
+    digitalWrite(PIN_3V3_EN, LOW); // cut switched 3V3 rail (all peripherals)
+#endif
+#ifdef T1000X_SENSOR_EN_PIN
+    pinMode(T1000X_SENSOR_EN_PIN, OUTPUT);
+    digitalWrite(T1000X_SENSOR_EN_PIN, LOW); // cut sensor power
+#endif
+    delay(120); // let the rail discharge so the sensor powers down
+#ifdef PIN_3V3_EN
+    digitalWrite(PIN_3V3_EN, HIGH); // restore peripheral power
+#endif
+#ifdef T1000X_SENSOR_EN_PIN
+    digitalWrite(T1000X_SENSOR_EN_PIN, HIGH); // restore sensor power
+#endif
+    delay(60); // sensor power-on / boot settle
+    bool i2cBusUsable = i2cBusRecover(PIN_WIRE_SDA, PIN_WIRE_SCL);
+#endif
 #if defined(SENSECAP_INDICATOR)
     // The Sensecap Indicator has its second I2C bus on the RP2040, bridged
     // over serial as i2cProxy. No local interface to initialize.
@@ -673,7 +744,16 @@ void setup()
         i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
     }
 #elif HAS_WIRE
+#if defined(TRACKER_T1000_E)
+    // Safety net: if bus recovery could not free a wedged slave, skip the scan entirely
+    // rather than hang forever in Adafruit Wire's unbounded endTransmission() wait.
+    if (i2cBusUsable)
+        i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+    else
+        LOG_ERROR("I2C bus unrecoverable - skipping scan so device still boots (no i2c sensors this session)");
+#else
     i2cScanner->scanPort(ScanI2C::I2CPort::WIRE);
+#endif
 #endif
 
     auto i2cCount = i2cScanner->countDevices();
