@@ -98,6 +98,11 @@ void InkHUD2::shutdown() {
     initialized = false;
 }
 
+void InkHUD2::waitUntilIdle() {
+    if (driver)
+        driver->waitUntilIdle();
+}
+
 // OSThread callback - runs periodically
 int32_t InkHUD2::runOnce() {
     if (!initialized) {

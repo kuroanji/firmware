@@ -28,6 +28,12 @@ public:
         return einkDriver ? einkDriver->busy() : false;
     }
 
+    // Block until the in-progress refresh fully completes (await() self-drives runOnce()).
+    void waitUntilIdle() override {
+        if (einkDriver)
+            einkDriver->await();
+    }
+
     void update(const uint8_t* data, bool fullRefresh) override {
         if (!einkDriver) return;
 

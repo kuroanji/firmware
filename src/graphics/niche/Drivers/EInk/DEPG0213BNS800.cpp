@@ -72,7 +72,10 @@ void DEPG0213BNS800::configWaveform()
 
     case FULL:
     default:
-        // From OTP memory
+        // From OTP memory. (Tried a 0x3C=0x01 single-blink border like E0213A367: it did NOT
+        // speed up FULL and slightly *increased* ghosting on this panel, so reverted. The FULL
+        // slowness is the panel's OTP 0xF7 waveform itself — busy-pin bound — not something we
+        // can trim in software without risking ghosting.)
         break;
     }
 }
@@ -105,7 +108,10 @@ void DEPG0213BNS800::detachFromUpdate()
         return beginPolling(50, 500); // At least 500ms, then poll every 50ms
     case FULL:
     default:
-        return beginPolling(100, 3500); // At least 3500ms, then poll every 100ms
+        // 3500ms was overly conservative for this panel — the same OTP (0xF7) full waveform on
+        // GDEY0213B74 completes in ~2000ms. Trim the forced minimum so FULL refresh isn't
+        // needlessly slow; the busy-pin poll still waits for real completion past this floor.
+        return beginPolling(100, 2000); // At least 2000ms, then poll every 100ms
     }
 }
 

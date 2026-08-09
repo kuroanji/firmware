@@ -32,6 +32,10 @@ public:
     // Check if display is busy (update in progress)
     virtual bool busy() const { return false; }
 
+    // Block until any in-progress update fully completes (used before power-off so a slow
+    // FULL refresh isn't cut mid-waveform, which would freeze the panel mid-blink).
+    virtual void waitUntilIdle() {}
+
     // Transfer buffer to display
     virtual void update(const uint8_t* data, bool fullRefresh) = 0;
 
@@ -54,6 +58,9 @@ public:
 
     // Main loop integration
     void update();  // Call from main loop
+
+    // Block until the display finishes its current refresh (for a clean shutdown screen).
+    void waitUntilIdle();
 
     // Event injection from firmware
     void onEvent(const Event& e);

@@ -469,8 +469,11 @@ void MenuModule::startShutdown() {
     InkHUD2::instance().requestFullRefresh();
     InkHUD2::instance().update();
 
-    // Brief pause to show final screen
-    delay(500);
+    // Wait for the FULL refresh to actually finish before cutting power. update() only STARTS
+    // the refresh; on a slow OTP panel (e.g. T3-S3, ~3-4s) a fixed short delay cut power
+    // mid-waveform, freezing the panel on a half-drawn black/inverted frame. waitUntilIdle()
+    // blocks until the display's busy pin clears.
+    InkHUD2::instance().waitUntilIdle();
 
     // Trigger actual shutdown
     ::shutdownAtMsec = millis();
@@ -496,8 +499,9 @@ void MenuModule::showShutdownScreen() {
     InkHUD2::instance().requestFullRefresh();
     InkHUD2::instance().update();
 
-    // Give display time to finish
-    delay(500);
+    // Wait for the FULL refresh to actually complete (see startShutdown): a fixed delay cut
+    // power mid-waveform on slow OTP panels, freezing a half-drawn frame.
+    InkHUD2::instance().waitUntilIdle();
 }
 
 void MenuModule::renderAlert(RenderContext& ctx) {
