@@ -4,11 +4,55 @@
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
-// InkHUD-specific components
-// ---------------------------
-#include "graphics/niche/InkHUD/InkHUD.h"
+#include "graphics/niche/Drivers/EInk/GDEY0154D67.h"
+#include "graphics/niche/Inputs/TwoButton.h"
 
-// Applets
+// ============================================================================
+// InkHUD2 - New Architecture
+// ============================================================================
+#ifdef USE_INKHUD2
+
+#include "graphics/niche/InkHUD2/Setup.h"
+
+void setupNicheGraphics()
+{
+    using namespace NicheGraphics;
+
+    Serial.println(F("[NicheGfx] setupNicheGraphics() start"));
+
+    // Initialize SPI for e-ink
+    SPI1.begin();
+
+    // Initialize e-ink driver
+    Drivers::EInk* driver = new Drivers::GDEY0154D67;
+    driver->begin(&SPI1, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
+
+    // Configure InkHUD2
+    InkHUD2::Config config;
+    config.backlightPin = PIN_EINK_EN;  // T-Echo uses PIN_EINK_EN for backlight
+    config.hasBacklight = true;
+    config.mainButtonPin = Inputs::TwoButton::getUserButtonPin();
+    config.mainButtonDebounce = 75;
+    config.mainButtonLongPress = 400;
+    config.auxButtonPin = PIN_BUTTON_TOUCH;
+    config.hasAuxButton = true;
+    config.auxButtonDebounce = 50;
+    config.auxButtonLongPress = 5000;  // 5 seconds - limited by T-Echo's capacitive touch IC
+    config.defaultRotation = 3;  // 270 degrees
+
+    // Initialize InkHUD2
+    InkHUD2::setup(driver, config);
+
+    Serial.println(F("[NicheGfx] setupNicheGraphics() complete"));
+}
+
+// ============================================================================
+// InkHUD (Original Architecture)
+// ============================================================================
+#else
+
+// InkHUD-specific components
+#include "graphics/niche/InkHUD/InkHUD.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
@@ -16,17 +60,10 @@
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
-
-// Shared NicheGraphics components
-// --------------------------------
 #include "graphics/niche/Drivers/Backlight/LatchingBacklight.h"
-#include "graphics/niche/Drivers/EInk/GDEY0154D67.h"
-#include "graphics/niche/Inputs/TwoButton.h"
 
 // Special case - fix T-Echo's touch button
-// ----------------------------------------
 // On a handful of T-Echos, LoRa TX triggers the capacitive touch
-// To avoid this, we lockout the button during TX
 #include "mesh/RadioLibInterface.h"
 
 void setupNicheGraphics()
@@ -125,4 +162,6 @@ void setupNicheGraphics()
     buttons->start();
 }
 
-#endif
+#endif // USE_INKHUD2
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

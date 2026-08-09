@@ -7,8 +7,12 @@
 #if !defined(ARCH_STM32WL) && !MESHTASTIC_EXCLUDE_I2C && !MESHTASTIC_EXCLUDE_MAGNETOMETER
 
 #include "../concurrency/OSThread.h"
-#include "MMC5983MASensor.h"
 #include "MotionSensor.h"
+
+#if __has_include(<SparkFun_MMC5983MA_Arduino_Library.h>)
+#include "MMC5983MASensor.h"
+#define HAS_MMC5983MA_LIB 1
+#endif
 
 extern ScanI2C::DeviceAddress magnetometer_found;
 
@@ -67,9 +71,11 @@ class MagnetometerThread : public concurrency::OSThread
         }
 
         switch (device.type) {
+#ifdef HAS_MMC5983MA_LIB
         case ScanI2C::DeviceType::MMC5983MA:
             sensor = new MMC5983MASensor(device);
             break;
+#endif
         default:
             disable();
             return;

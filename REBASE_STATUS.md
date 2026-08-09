@@ -24,11 +24,15 @@ cherry-port our layer file-by-file, fixing base-API drift as it surfaces.
 - NOTE: 6eac181 base ALREADY has today's fixes (extern SPI_HSPI, partition-table-t3s3.csv,
   &SPI_HSPI reuse) — they were restored FROM it, so no need to re-add on this branch.
 
-## IN PROGRESS 🔨 — get T3-S3 to compile
-Build `tlora-t3s3-epaper-inkhud2`. Current blocker:
-- `InkHUD2/Events.cpp` calls `NodeDB::backupNodeDatabase()` — our backup/restore core
-  patch, NOT in 6eac181. Our method lives at `update-inkhud2:src/mesh/NodeDB.cpp:3386`
-  (decl `NodeDB.h:389`). NodeDB drifted ~1664 lines vs our base → manual merge.
+## DONE ✅ (cont.) — T3-S3 WORKS on new base @ commit 44627d039
+- backup/restore core patches ported into 6eac181 NodeDB:
+  `backupNodeDatabase()` + `backupUserPreferences()` + `userBackupFileName` const (public decls).
+- T3-S3 `tlora-t3s3-epaper-inkhud2`: **compiles, flashes, boots, BLE/screen/menu OK**.
+- 🎯 **radio-reconfigure crash GONE** — user confirmed no reboot on BLE connect. This was
+  the whole reason for the rebase (old base drifted behind upstream radio fixes).
+- ⚠️ backup/restore NOT fully done: only the two methods InkHUD2 needs. Auto boot-restore
+  (corruptSettingsMask in loadFromDisk, T1000-E self-heal) + faithful position projection
+  in backupNodeDatabase still TODO.
 
 ## TODO (ordered)
 1. **backup/restore** → merge into 6eac181 NodeDB: `backupNodeDatabase()`, `corruptSettingsMask`,

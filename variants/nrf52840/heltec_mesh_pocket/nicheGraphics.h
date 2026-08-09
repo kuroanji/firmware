@@ -4,11 +4,51 @@
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
 
-// InkHUD-specific components
-// ---------------------------
-#include "graphics/niche/InkHUD/InkHUD.h"
+#include "graphics/niche/Drivers/EInk/LCMEN2R13ECC1.h"
+#include "graphics/niche/Inputs/TwoButton.h"
 
-// Applets
+// ============================================================================
+// InkHUD2 - New Architecture
+// ============================================================================
+#ifdef USE_INKHUD2
+
+#include "graphics/niche/InkHUD2/Setup.h"
+
+void setupNicheGraphics()
+{
+    using namespace NicheGraphics;
+
+    Serial.println(F("[NicheGfx] setupNicheGraphics() start"));
+
+    // Initialize SPI for e-ink
+    SPI1.begin();
+
+    // Initialize e-ink driver
+    Drivers::EInk* driver = new Drivers::LCMEN2R13ECC1;
+    driver->begin(&SPI1, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
+
+    // Configure InkHUD2 (Mesh Pocket has single button, no backlight)
+    InkHUD2::Config config;
+    config.hasBacklight = false;
+    config.mainButtonPin = PIN_BUTTON1;
+    config.mainButtonDebounce = 75;
+    config.mainButtonLongPress = 400;
+    config.hasAuxButton = false;
+    config.defaultRotation = 3;  // Landscape
+    config.idleFullRefreshMs = 60000;  // FULL refresh after 60s idle (clears ghosting)
+
+    // Initialize InkHUD2
+    InkHUD2::setup(driver, config);
+
+    Serial.println(F("[NicheGfx] setupNicheGraphics() complete"));
+}
+
+// ============================================================================
+// InkHUD (Original Architecture)
+// ============================================================================
+#else
+
+#include "graphics/niche/InkHUD/InkHUD.h"
 #include "graphics/niche/InkHUD/Applets/User/AllMessage/AllMessageApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/DM/DMApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/FavoritesMap/FavoritesMapApplet.h"
@@ -16,11 +56,6 @@
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
-
-// Shared NicheGraphics components
-// --------------------------------
-#include "graphics/niche/Drivers/EInk/LCMEN2R13ECC1.h"
-#include "graphics/niche/Inputs/TwoButton.h"
 
 void setupNicheGraphics()
 {
@@ -89,4 +124,6 @@ void setupNicheGraphics()
     buttons->start();
 }
 
-#endif
+#endif // USE_INKHUD2
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS
