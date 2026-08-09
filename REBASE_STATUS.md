@@ -46,10 +46,18 @@ cherry-port our layer file-by-file, fixing base-API drift as it surfaces.
 - **ALL 9 firmware envs now build on 6eac181** (8 InkHUD2 + T1000-E).
 - hide_pin: already handled — it lives in InkHUD2 engine/Settings, ported with the engine.
 
-## REMAINING (optional / non-critical)
-- **auto boot-restore** (corruptSettingsMask in NodeDB::loadFromDisk) — T1000-E self-heal FEATURE,
-  NOT needed to compile (everything builds). loadFromDisk drifted heavily → careful merge if wanted.
-- **tooling** (non-firmware): mcp-server/, docs/, .claude/, INDEX.md — port last, doesn't affect builds.
+## DONE ✅ — auto boot-restore @ commit 9df45b57b
+- corruptSettingsMask in loadFromDisk (config/moduleConfig/channels DECODE_FAILED) + restore block.
+- Adapted to 6eac181 single backupFileName (our 3-tier rotation not carried; uses backupFileName + userBackupFileName).
+- Lifts upstream configDecodeFailed freeze on successful restore. Compiles (t1000+t-echo clean).
+- ⚠️ NOT HW-tested functionally (corruption hard to repro) — same caveat as always.
+
+## ✅✅ FIRMWARE REBASE COMPLETE — all functional layers on 6eac181
+Commits on `rebase/inkhud2-on-6eac181`: 44627d0 → f9bc109 → 7fb5437 → 9df45b5.
+All 9 envs build; T3-S3 HW-verified (radio-reconfigure crash gone).
+
+## REMAINING (non-firmware, optional)
+- **tooling**: mcp-server/, docs/, .claude/, INDEX.md — doesn't affect firmware builds. Port last.
 
 ## TODO (ordered)
 1. **backup/restore** → merge into 6eac181 NodeDB: `backupNodeDatabase()`, `corruptSettingsMask`,

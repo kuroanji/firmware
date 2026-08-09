@@ -1,0 +1,330 @@
+# InkHUD2 Patches & Modifications
+
+Documentation of all changes relative to base Meshtastic firmware.
+
+---
+
+## Core Firmware Changes
+
+### 1. Bluetooth Hide PIN — ❌ **RETIRED 2026-07-18, no longer a protobuf patch**
+
+**Previously** this required hand-patching `protobufs/meshtastic/config.proto` to add
+`bool hide_pin = 4;` to `BluetoothConfig` and regenerating `config.pb.h`. That patch was
+**wiped by every upstream base bump** — and indeed it was silently lost in the 2.7.25 bump
+(2026-06-16), leaving InkHUD2 referencing a field that no longer existed. That was one of
+the causes of the tree-wide build breakage found on 2026-07-18.
+
+**Now:** the setting lives in InkHUD2's own settings file `/prefs/inkhud2.dat`
+(format **v3**: `[version][rotation][hidePIN]`, v2 still readable). Accessors:
+`Settings::getHidePIN() / setHidePIN() / hidePINPtr()`; persisted via `Settings::save()`
+(not `nodeDB->saveToDisk()`).
+
+**Files:** `src/graphics/niche/InkHUD2/Core/Settings.{h,cpp}`, `Setup.cpp`.
+
+> ✅ **Consequence: we no longer patch protobufs at all.** `git diff` over
+> `src/mesh/generated/` and `protobufs/` is empty — they are bit-identical to upstream.
+> An upstream base bump now needs **zero** manual protobuf work. `docs/HIDE_PIN_PROTOBUF.md`
+> is kept only as history — do not apply it.
+
+---
+
+### 2. NodeDB Save Throttle (`src/mesh/Default.h`, `src/mesh/NodeDB.cpp`)
+
+Increased NodeDB save throttle from 1 minute to 10 minutes for flash wear protection.
+
+```cpp
+// Default.h
+#define TEN_MINUTES_MS 10 * 60 * 1000
+
+// NodeDB.cpp:1898
+if (!Throttle::isWithinTimespanMs(lastNodeDbSave, TEN_MINUTES_MS)) {
+    saveToDisk(SEGMENT_NODEDATABASE);
+    lastNodeDbSave = millis();
+}
+```
+
+**Rationale:** See `docs/FLASH_WEAR_PROTECTION.md`
+
+**Files:**
+- `src/mesh/Default.h` — added `TEN_MINUTES_MS` constant
+- `src/mesh/NodeDB.cpp` — changed throttle from `ONE_MINUTE_MS` to `TEN_MINUTES_MS`
+
+---
+
+### 3. Backup System (`src/mesh/NodeDB.h`, `src/mesh/NodeDB.cpp`, `src/Power.cpp`)
+
+Added backup system:
+
+```cpp
+// NodeDB.h
+static constexpr const char *autoBackupFileName = "/backups/auto_backup.proto";
+static constexpr const char *autoBackupPrevFileName = "/backups/auto_backup_prev.proto";
+static constexpr const char *userBackupFileName = "/backups/user_backup.proto";
+
+bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
+bool backupUserPreferences();  // Manual "golden" backup
+bool restorePreferences(meshtastic_AdminMessage_BackupLocation location, int restoreWhat);
+```
+
+**Functionality:**
+- `backupPreferences(FLASH)` — automatic backup with rotation
+- `backupUserPreferences()` — manual "golden" backup
+- `restorePreferences()` — restore from backup chain
+- Auto-recovery on boot if main files are corrupted
+- Auto backup on any shutdown (Power.cpp integration)
+
+**Files:**
+- `src/mesh/NodeDB.h` — method declarations
+- `src/mesh/NodeDB.cpp` — backup/restore implementation
+- `src/Power.cpp` — auto backup on shutdown (added `backupPreferences(FLASH)` call)
+
+---
+
+## E-Ink Drivers
+
+### HeltecVME290 (`src/graphics/niche/Drivers/EInk/HeltecVME290.h/cpp`)
+
+Custom hybrid driver for Heltec Vision Master E290 panel. Fixes ghosting by combining two approaches:
+
+**From ZJY128296_029EAAMFGN (OTP-based):**
+- OTP LUT from controller memory (not custom in firmware)
+- Internal temperature sensor (0x80) for automatic waveform selection
+- Border waveform 0x05 (follow LUT1, drive white)
+- Update sequence 0xFF (differential from OTP)
+
+**From DEPG0290BNS800:**
+- Buffer offset: 1 byte (panel wiring quirk)
+
+**NOT used from ZJY:**
+- configScanning override (not needed for this panel)
+
+**Result:** No ghosting, faster refresh (~300ms), auto temperature adaptation.
+
+See: `src/graphics/niche/InkHUD2/docs/DISPLAY_DRIVER_E290.md`
+
+---
+
+## InkHUD2 Files
+
+### New Directories
+
+```
+src/graphics/niche/InkHUD2/
+├── Core/
+│   ├── Buffer.h             — Frame buffer management
+│   ├── Font.h/cpp           — CJKFont wrapper
+│   ├── Layout.h             — Dynamic layout calculation
+│   ├── RenderContext.h/cpp  — Drawing primitives
+│   ├── Logo.h/cpp           — Meshtastic logo rendering
+│   ├── Settings.h           — Persistent settings (hide_pin, etc.)
+│   └── BluetoothState.h/cpp — BT connection state
+├── Drivers/
+│   └── EInkAdapter.h/cpp    — Adapter for e-ink driver
+├── Fonts/
+│   ├── UnifiedFont18px.h/cpp — Placeholder (not used)
+├── Modules/
+│   ├── Module.h             — Base module interface
+│   ├── BatteryModule.h/cpp
+│   ├── BootModule.h/cpp
+│   ├── MenuModule.h/cpp
+│   ├── MessageModule.h/cpp
+│   ├── NodeListModule.h/cpp
+│   └── MapModule.h/cpp
+├── Pipe/
+│   ├── Pipe.h/cpp           — Module lifecycle
+│   └── Events.h/cpp         — Meshtastic event bridge + shutdown handler
+├── Text/
+│   └── TextRenderer.cpp     — Text with wrapping
+├── UI/
+│   ├── MenuItem.h           — Menu item struct
+│   ├── MenuList.h/cpp       — Menu rendering
+│   ├── StatusBar.h/cpp      — Header with icon and title
+│   ├── Footer.h/cpp         — Footer with hint text
+│   ├── ContentArea.h        — Content area calculation
+│   └── Compass.h/cpp        — Compass with heading arrow
+├── Views/
+│   ├── ListView.h/cpp       — Message list view
+│   └── ChatView.h/cpp       — Chat-style view
+├── InkHUD2.h/cpp            — Main singleton
+└── Setup.h/cpp              — Common initialization (modules, menu, buttons)
+```
+
+---
+
+## CJK Font
+
+### Location
+```
+src/graphics/niche/Fonts/CJK/
+├── CJKFont.h                — Font interface
+└── UnifiedFont18px.h        — Japanese + Cyrillic + Latin (2932 glyphs)
+```
+
+### Generation
+Font generator: `/font-generator/`
+- `generate_font_japanese.py` — Japanese + Cyrillic + Latin
+- `generate_font_chinese.py` — Chinese + Latin
+- `generate_font_korean.py` — Korean + Latin
+
+---
+
+## Variant Configuration
+
+### `variants/nrf52840/t-echo-plus/nicheGraphics.h`
+
+Simplified to ~100 lines (was ~500). Device-specific only:
+- E-ink driver initialization
+- `InkHUD2::Config` with device pins and settings
+- Single call to `InkHUD2::setup(driver, config)`
+
+Common code moved to `Setup.h/cpp`:
+- All modules creation
+- Menu configuration (items, submenus, callbacks)
+- Button handlers
+- Event system setup
+
+### `variants/esp32s3/heltec_vision_master_e290/nicheGraphics.h`
+
+Support for both InkHUD (original) and InkHUD2:
+- Uses `HeltecVME290` driver (fixes ghosting vs original `DEPG0290BNS800`)
+- Passes reset pin to driver for deep sleep support
+- Aux button used for scrolling (no backlight on this device)
+- Default rotation: 270° (LoRa antenna up)
+
+## PlatformIO Configuration
+
+### `platformio.ini`
+
+Added environment for InkHUD2:
+
+```ini
+[env:t-echo-plus-inkhud2]
+extends = nrf52840_base
+board = t-echo
+build_flags =
+    ${nrf52840_base.build_flags}
+    -DUSE_INKHUD2
+    -DMESHTASTIC_INCLUDE_NICHE_GRAPHICS
+    # ... other flags
+```
+
+---
+
+## Files Modified (Summary)
+
+| File | Change |
+|------|--------|
+| `protobufs/meshtastic/config.proto` | Added `hide_pin` field to BluetoothConfig |
+| `src/mesh/generated/meshtastic/config.pb.h` | Regenerated with `hide_pin` |
+| `src/mesh/Default.h` | Added `TEN_MINUTES_MS` constant |
+| `src/mesh/NodeDB.h` | Added backup file constants and methods |
+| `src/mesh/NodeDB.cpp` | Implemented backup/restore logic + 10min throttle |
+| `src/Power.cpp` | Added auto backup on shutdown |
+| `src/modules/AdminModule.cpp` | Fixed incomplete backup removal code |
+| `src/motion/AccelerometerThread.h` | Added `__has_include` guards for optional sensors |
+| `src/motion/MagnetometerThread.h` | Added `__has_include` guard for MMC5983MA sensor |
+
+### Variant Files (nRF52840)
+
+| File | Change |
+|------|--------|
+| `variants/nrf52840/t-echo/nicheGraphics.h` | Added InkHUD2 support |
+| `variants/nrf52840/t-echo/platformio.ini` | Added `t-echo-inkhud2` env |
+| `variants/nrf52840/t-echo-plus/nicheGraphics.h` | Simplified to device-specific config only |
+| `variants/nrf52840/t-echo-plus/platformio.ini` | Added `t-echo-plus-inkhud2` env |
+| `variants/nrf52840/heltec_mesh_pocket/nicheGraphics.h` | Added InkHUD2 support with idle maintenance |
+| `variants/nrf52840/heltec_mesh_pocket/platformio.ini` | Added `heltec-mesh-pocket-qi2-inkhud2` env |
+
+### Variant Files (ESP32-S3)
+
+| File | Change |
+|------|--------|
+| `variants/esp32s3/heltec_vision_master_e290/nicheGraphics.h` | Added InkHUD2 support, switched to HeltecVME290 driver |
+| `variants/esp32s3/heltec_vision_master_e290/platformio.ini` | Added `heltec-vision-master-e290-inkhud2` env |
+| `variants/esp32s3/heltec_vision_master_e213/nicheGraphics.h` | Added InkHUD2 support |
+| `variants/esp32s3/heltec_vision_master_e213/platformio.ini` | Added `heltec-vision-master-e213-inkhud2` env |
+| `variants/esp32s3/heltec_wireless_paper/nicheGraphics.h` | Added InkHUD2 support |
+| `variants/esp32s3/heltec_wireless_paper/platformio.ini` | Added `heltec-wireless-paper-inkhud2` env |
+
+### E-Ink Drivers
+
+| File | Change |
+|------|--------|
+| `src/graphics/niche/Drivers/EInk/EInk.h` | Added pollingTimeout for slow displays |
+| `src/graphics/niche/Drivers/EInk/EInk.cpp` | Timeout handling in polling |
+| `src/graphics/niche/Drivers/EInk/HeltecVME290.h/cpp` | New hybrid driver for VM-E290 (OTP LUT + offset) |
+| `src/graphics/niche/Drivers/EInk/LCMEN2R13ECC1.h/cpp` | Temperature sensor + border waveform config |
+
+### AccelerometerThread.h Details
+
+Added conditional compilation guards for sensor libraries that may not be present:
+
+```cpp
+#ifdef HAS_MPU6050_LIB
+case ScanI2C::DeviceType::MPU6050:
+    sensor = new MPU6050Sensor(device);
+    break;
+#endif
+#ifdef HAS_LIS3DH_LIB
+case ScanI2C::DeviceType::LIS3DH:
+    sensor = new LIS3DHSensor(device);
+    break;
+#endif
+// ... similar for LSM6DS3, ICM20948, BMM150, BMX160
+```
+
+This allows builds without motion sensor libraries (saves ~17KB flash).
+
+### AdminModule.cpp Details
+
+Fixed incomplete backup removal code that referenced undefined `backupFileName`:
+
+```cpp
+// Before (broken):
+FSCom.remove(backupFileName);
+
+// After (fixed):
+FSCom.remove(autoBackupFileName);
+FSCom.remove(autoBackupPrevFileName);
+FSCom.remove(userBackupFileName);
+```
+
+---
+
+## Files Added
+
+All files under:
+- `src/graphics/niche/InkHUD2/` (entire directory)
+- `src/graphics/niche/InkHUD2/Setup.h` — device config struct with `idleFullRefreshMs` option
+- `src/graphics/niche/InkHUD2/Setup.cpp` — common initialization logic
+- `src/graphics/niche/InkHUD2/docs/` — driver documentation
+  - `DISPLAY_DRIVER_E290.md` — HeltecVME290 driver documentation
+  - `HOWTO_ADD_EINK_DRIVER.md` — guide for adding new e-ink drivers
+- `src/graphics/niche/Drivers/EInk/HeltecVME290.h/cpp` — hybrid driver for VM-E290
+- `src/graphics/niche/Fonts/CJK/UnifiedFont18px.h`
+- `src/graphics/niche/Fonts/CJK/CJKFont.h`
+
+## Build Environments
+
+| Environment | Platform | Device |
+|-------------|----------|--------|
+| `t-echo-inkhud2` | nRF52840 | LilyGo T-Echo |
+| `t-echo-plus-inkhud2` | nRF52840 | LilyGo T-Echo Plus |
+| `heltec-mesh-pocket-qi2-inkhud2` | nRF52840 | Heltec Mesh Pocket Qi2 |
+| `heltec-vision-master-e290-inkhud2` | ESP32-S3 | Heltec Vision Master E290 |
+| `heltec-vision-master-e213-inkhud2` | ESP32-S3 | Heltec Vision Master E213 |
+| `heltec-wireless-paper-inkhud2` | ESP32-S3 | Heltec Wireless Paper |
+
+## Build Commands
+
+```bash
+# nRF52840 devices (produces .uf2 file)
+pio run -e t-echo-inkhud2
+pio run -e t-echo-plus-inkhud2
+pio run -e heltec-mesh-pocket-qi2-inkhud2
+
+# ESP32-S3 devices (produces .factory.bin file)
+pio run -e heltec-vision-master-e290-inkhud2
+pio run -e heltec-vision-master-e213-inkhud2
+pio run -e heltec-wireless-paper-inkhud2
+```
