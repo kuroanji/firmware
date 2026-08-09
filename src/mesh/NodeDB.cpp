@@ -2217,6 +2217,14 @@ void NodeDB::nodeDBSelfCare()
 
 void NodeDB::loadFromDisk()
 {
+    // Fork (backup/restore): accumulate which settings segments failed to load (genuine
+    // corruption, not first boot). Consumed at the end of this function to auto-restore
+    // them from the newest good backup. Complements upstream's identity-freeze on
+    // DECODE_FAILED (which keeps the key but drops settings to defaults) by actually
+    // recovering the user's config/moduleConfig/channels — the whole point on a
+    // screenless device (T1000-E) that can't restore via UI.
+    int corruptSettingsMask = 0;
+
     // Mark the current device state as completely unusable, so that if we fail reading the entire file from
     // disk we will still factoryReset to restore things.
     devicestate.version = 0;
@@ -2490,6 +2498,7 @@ void NodeDB::loadFromDisk()
         installDefaultConfig(true);
         config.lora.region = meshtastic_Config_LoRaConfig_RegionCode_UNSET;
         config.lora.tx_enabled = false;
+        corruptSettingsMask |= SEGMENT_CONFIG; // fork: flag for auto-restore from backup below
     } else if (state != LoadFileResult::LOAD_SUCCESS) {
         // No decodable config to work with: the file is absent (first boot) or could not be opened (OTHER_FAILURE
         // / NO_FILESYSTEM). Unlike DECODE_FAILED there are no usable contents to protect, so install defaults.
@@ -2612,6 +2621,8 @@ void NodeDB::loadFromDisk()
                       &meshtastic_LocalModuleConfig_msg, &moduleConfig);
     if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultModuleConfig(); // Our in RAM copy might now be corrupt
+        if (state == LoadFileResult::DECODE_FAILED)
+            corruptSettingsMask |= SEGMENT_MODULECONFIG; // fork: corrupt (not absent) -> auto-restore below
     } else {
         if (moduleConfig.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("moduleConfig %d is old, discard", moduleConfig.version);
@@ -2635,6 +2646,8 @@ void NodeDB::loadFromDisk()
                       &channelFile);
     if (state != LoadFileResult::LOAD_SUCCESS) {
         installDefaultChannels(); // Our in RAM copy might now be corrupt
+        if (state == LoadFileResult::DECODE_FAILED)
+            corruptSettingsMask |= SEGMENT_CHANNELS; // fork: corrupt (not absent) -> auto-restore below
     } else {
         if (channelFile.version < DEVICESTATE_MIN_VER) {
             LOG_WARN("channelFile %d is old, discard", channelFile.version);
@@ -2778,6 +2791,33 @@ void NodeDB::loadFromDisk()
         config.network.enabled_protocols = meshtastic_Config_NetworkConfig_ProtocolFlags_UDP_BROADCAST;
     }
 
+#endif
+
+    // Fork (backup/restore): if genuine corruption was detected in config/moduleConfig/channels
+    // above (DECODE_FAILED, flagged in corruptSettingsMask), auto-restore those segments from the
+    // newest good backup. This is what actually recovers user settings after a power-loss/reset
+    // corruption — upstream's DECODE_FAILED path only freezes identity and boots on defaults
+    // (radio silent), it does NOT restore. The haveBackup guard keeps first boot (no backup yet)
+    // quiet. On a screenless device (T1000-E) this is the only recovery path (no UI restore).
+#ifdef FSCom
+    if (corruptSettingsMask) {
+        spiLock->lock();
+        bool haveBackup = FSCom.exists(backupFileName) || FSCom.exists(userBackupFileName);
+        spiLock->unlock();
+        if (haveBackup) {
+            LOG_WARN("Corrupt settings detected (mask=0x%x), auto-restoring from backup", corruptSettingsMask);
+            if (restorePreferences(meshtastic_AdminMessage_BackupLocation_FLASH, corruptSettingsMask)) {
+                LOG_INFO("Auto-restored corrupt settings from backup");
+                // Config is now valid (loaded from a good backup, with its real identity), so lift the
+                // degraded-boot freeze upstream set on DECODE_FAILED — the radio can come up normally.
+                configDecodeFailed = false;
+            } else {
+                LOG_WARN("Auto-restore failed: no valid backup could be loaded");
+            }
+        } else {
+            LOG_DEBUG("Corrupt settings (mask=0x%x) but no backup exists yet (first boot?)", corruptSettingsMask);
+        }
+    }
 #endif
 }
 

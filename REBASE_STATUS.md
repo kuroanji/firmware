@@ -40,6 +40,17 @@ cherry-port our layer file-by-file, fixing base-API drift as it surfaces.
 - Motion fix: ported our `MMC5983MA __has_include` guard in `MagnetometerThread.h`;
   kept `AccelerometerThread.h` UPSTREAM (it gained `providesHeading` — do NOT replace with ours).
 
+## DONE ✅ (cont.) — T1000-E i2c-rescue @ commit 7fb543767
+- i2cBusRecover() + power-cycle + skip-scan ported into drifted main.cpp (guarded TRACKER_T1000_E).
+- tracker-t1000-e builds; t-echo regression clean.
+- **ALL 9 firmware envs now build on 6eac181** (8 InkHUD2 + T1000-E).
+- hide_pin: already handled — it lives in InkHUD2 engine/Settings, ported with the engine.
+
+## REMAINING (optional / non-critical)
+- **auto boot-restore** (corruptSettingsMask in NodeDB::loadFromDisk) — T1000-E self-heal FEATURE,
+  NOT needed to compile (everything builds). loadFromDisk drifted heavily → careful merge if wanted.
+- **tooling** (non-firmware): mcp-server/, docs/, .claude/, INDEX.md — port last, doesn't affect builds.
+
 ## TODO (ordered)
 1. **backup/restore** → merge into 6eac181 NodeDB: `backupNodeDatabase()`, `corruptSettingsMask`,
    auto boot-restore in `loadFromDisk`. (task #3)
