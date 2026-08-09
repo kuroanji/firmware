@@ -155,6 +155,7 @@ static constexpr auto RADIO_PROFILE_STORAGE = radioProfileStoragePaths(false);
 static constexpr const char *configFileName = RADIO_PROFILE_STORAGE.config;
 static constexpr const char *channelFileName = RADIO_PROFILE_STORAGE.channels;
 static constexpr const char *backupFileName = RADIO_PROFILE_STORAGE.backup;
+static constexpr const char *userBackupFileName = "/backups/user_backup.proto"; // fork: manual "golden" backup
 static constexpr const char *uiconfigFileName = "/prefs/uiconfig.proto";
 static constexpr const char *moduleConfigFileName = "/prefs/module.proto";
 
@@ -566,6 +567,8 @@ class NodeDB
     bool backupPreferences(meshtastic_AdminMessage_BackupLocation location);
     bool restorePreferences(meshtastic_AdminMessage_BackupLocation location,
                             int restoreWhat = SEGMENT_CONFIG | SEGMENT_MODULECONFIG | SEGMENT_DEVICESTATE | SEGMENT_CHANNELS);
+    bool backupNodeDatabase();     // Backup nodes.proto to /backups/ before shutdown (fork: InkHUD2 shutdown recovery)
+    bool backupUserPreferences();  // Manual "golden" backup, survives auto-backup corruption (fork)
 
     /// Notify observers of changes to the DB
     void notifyObservers(bool forceUpdate = false)

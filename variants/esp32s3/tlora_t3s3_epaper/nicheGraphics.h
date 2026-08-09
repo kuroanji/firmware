@@ -1,9 +1,53 @@
 #pragma once
 
-#include "FSCommon.h"
+#include "FSCommon.h" // for SPI_HSPI (display shares the HSPI bus with the SD card)
 #include "configuration.h"
 
 #ifdef MESHTASTIC_INCLUDE_NICHE_GRAPHICS
+
+// Shared NicheGraphics components
+// --------------------------------
+#include "graphics/niche/Drivers/EInk/DEPG0213BNS800.h"
+#include "graphics/niche/Inputs/TwoButton.h"
+
+// ============================================================================
+// InkHUD2 - New Architecture
+// ============================================================================
+#ifdef USE_INKHUD2
+
+#include "graphics/niche/InkHUD2/Setup.h"
+
+void setupNicheGraphics()
+{
+    using namespace NicheGraphics;
+
+    Serial.println(F("[NicheGfx] setupNicheGraphics() start (T3-S3 E-Paper, InkHUD2)"));
+
+    // SPI: display shares the HSPI bus with the SD card; reuse the host rather than re-init it
+    SPIClass *hspi = &SPI_HSPI;
+
+    // E-Ink driver: single panel on this board (DEPG0213BNS800, 122x250)
+    Drivers::EInk *driver = new Drivers::DEPG0213BNS800;
+    driver->begin(hspi, PIN_EINK_DC, PIN_EINK_CS, PIN_EINK_BUSY, PIN_EINK_RES);
+
+    // Configure InkHUD2 (device-specific)
+    InkHUD2::Config config;
+    config.mainButtonPin = Inputs::TwoButton::getUserButtonPin(); // GPIO0
+    config.mainButtonDebounce = 75;
+    config.mainButtonLongPress = 400;
+    config.hasAuxButton = false; // single button on this board
+    config.hasBacklight = false;
+    config.defaultRotation = 3;  // 270 degrees - landscape (250x122)
+
+    InkHUD2::setup(driver, config);
+
+    Serial.println(F("[NicheGfx] setupNicheGraphics() complete"));
+}
+
+// ============================================================================
+// InkHUD (Original Architecture)
+// ============================================================================
+#else
 
 // InkHUD-specific components
 // ---------------------------
@@ -17,11 +61,6 @@
 #include "graphics/niche/InkHUD/Applets/User/Positions/PositionsApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/RecentsList/RecentsListApplet.h"
 #include "graphics/niche/InkHUD/Applets/User/ThreadedMessage/ThreadedMessageApplet.h"
-
-// Shared NicheGraphics components
-// --------------------------------
-#include "graphics/niche/Drivers/EInk/DEPG0213BNS800.h"
-#include "graphics/niche/Inputs/TwoButton.h"
 
 void setupNicheGraphics()
 {
@@ -88,4 +127,6 @@ void setupNicheGraphics()
     buttons->start();
 }
 
-#endif
+#endif // USE_INKHUD2
+
+#endif // MESHTASTIC_INCLUDE_NICHE_GRAPHICS

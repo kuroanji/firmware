@@ -3107,6 +3107,75 @@ bool NodeDB::saveNodeDatabaseToDisk()
     return ok;
 }
 
+// Fork (InkHUD2): snapshot the node database to /backups/ before shutdown/reboot, so a
+// corrupted main file can be recovered. NOTE: on this base the on-disk positions/etc are
+// projected into nodeDatabase only inside saveNodeDatabaseToDisk(); this snapshot captures
+// nodeDatabase as-is (sufficient for node-list recovery). TODO: project maps before encoding
+// for a fully faithful backup.
+bool NodeDB::backupNodeDatabase()
+{
+#ifdef FSCom
+    if (numMeshNodes <= 1) {
+        LOG_DEBUG("Skip node backup - only own node present");
+        return true;
+    }
+
+    spiLock->lock();
+    FSCom.mkdir("/backups");
+    spiLock->unlock();
+
+    size_t nodeDatabaseSize;
+    pb_get_encoded_size(&nodeDatabaseSize, meshtastic_NodeDatabase_fields, &nodeDatabase);
+
+    bool success = saveProto("/backups/nodes_backup.proto", nodeDatabaseSize, &meshtastic_NodeDatabase_msg, &nodeDatabase, false);
+
+    if (success) {
+        LOG_INFO("Backed up NodeDatabase (%d nodes)", numMeshNodes);
+    } else {
+        LOG_ERROR("Failed to backup NodeDatabase");
+    }
+    return success;
+#else
+    return false;
+#endif
+}
+
+// Fork (InkHUD2): manual "golden" snapshot of config/moduleConfig/channels/owner to a
+// dedicated file, separate from the auto-rotating backup, so a user can always fall back
+// to a known-good state even if the auto backup got corrupted.
+bool NodeDB::backupUserPreferences()
+{
+    bool success = false;
+#ifdef FSCom
+    meshtastic_BackupPreferences backup = meshtastic_BackupPreferences_init_zero;
+    backup.version = DEVICESTATE_CUR_VER;
+    backup.timestamp = getValidTime(RTCQuality::RTCQualityDevice, false);
+    backup.has_config = true;
+    backup.config = config;
+    backup.has_module_config = true;
+    backup.module_config = moduleConfig;
+    backup.has_channels = true;
+    backup.channels = channelFile;
+    backup.has_owner = true;
+    backup.owner = owner;
+
+    size_t backupSize;
+    pb_get_encoded_size(&backupSize, meshtastic_BackupPreferences_fields, &backup);
+
+    spiLock->lock();
+    FSCom.mkdir("/backups");
+    spiLock->unlock();
+    success = saveProto(userBackupFileName, backupSize, &meshtastic_BackupPreferences_msg, &backup);
+
+    if (success) {
+        LOG_INFO("Saved USER backup preferences (manual golden snapshot)");
+    } else {
+        LOG_ERROR("Failed to save user backup preferences to file");
+    }
+#endif
+    return success;
+}
+
 bool NodeDB::saveToDiskNoRetry(int saveWhat)
 {
 

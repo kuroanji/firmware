@@ -1,0 +1,55 @@
+# REBASE STATUS — InkHUD2 → upstream 6eac181
+
+**Goal:** move our InkHUD2 fork onto fresh upstream base `6eac181` (which has working
+T3-S3 radio-reconfigure), instead of patching our stale base. Root cause of the T3-S3
+radio-reconfigure crash = our base drifted far behind upstream (radio/NodeDB refactors).
+
+## Branches & backup
+- Working branch: **`rebase/inkhud2-on-6eac181`** (created from `6eac181`).
+- Old fork state: **`update-inkhud2`** @ `dceb72e1d` (today's T3-S3 fixes committed there).
+- Backup pointer: **`backup/pre-rebase-2026-08-09`**.
+- Tar backup: `/Users/mysinpyu/Claude/firmware_inkhud2_dev_BACKUP_2026-08-09.tar.gz` (81M, verified).
+
+## Method
+git-rebase impossible (1068-file drift). Instead: fresh branch from 6eac181, then
+cherry-port our layer file-by-file, fixing base-API drift as it surfaces.
+`git checkout update-inkhud2 -- <path>` pulls our version of a file onto the new base.
+
+## DONE ✅
+- InkHUD2 engine: `src/graphics/niche/InkHUD2/` (65 files) — ported, compiles.
+- CJK fonts: `src/graphics/niche/Fonts/CJK/` (7 files) — ported.
+- Driver `HeltecVME290.{cpp,h}` — ported.
+- T3-S3 configs: our `nicheGraphics.h` (InkHUD2 branch), `platformio.ini` (inkhud2 env),
+  `InkHUD/PlatformioConfig.ini` (inkhud base env) — ported.
+- NOTE: 6eac181 base ALREADY has today's fixes (extern SPI_HSPI, partition-table-t3s3.csv,
+  &SPI_HSPI reuse) — they were restored FROM it, so no need to re-add on this branch.
+
+## IN PROGRESS 🔨 — get T3-S3 to compile
+Build `tlora-t3s3-epaper-inkhud2`. Current blocker:
+- `InkHUD2/Events.cpp` calls `NodeDB::backupNodeDatabase()` — our backup/restore core
+  patch, NOT in 6eac181. Our method lives at `update-inkhud2:src/mesh/NodeDB.cpp:3386`
+  (decl `NodeDB.h:389`). NodeDB drifted ~1664 lines vs our base → manual merge.
+
+## TODO (ordered)
+1. **backup/restore** → merge into 6eac181 NodeDB: `backupNodeDatabase()`, `corruptSettingsMask`,
+   auto boot-restore in `loadFromDisk`. (task #3)
+2. Get T3-S3 to fully compile (iterate build → port next missing symbol). (task #2)
+3. **Flash+verify T3-S3** — boot/BLE/screen/menu + **radio-reconfigure no longer crashes**
+   (the whole point). (task #5)
+4. **T1000-E i2c-rescue** → merge into 6eac181 `main.cpp`. (task #4)
+5. **hide_pin** patch (Settings).
+6. **Remaining 7 targets** — nicheGraphics InkHUD2 branches + inkhud2 envs
+   (t-echo, t-echo-plus, mesh-pocket, heltec e290/e213/wireless-paper, thinknode-m1) + T1000-E env.
+7. **Tooling** (non-firmware, port last): `mcp-server/`, `docs/`, `.claude/`, INDEX.md.
+8. Build + HW-verify each target.
+
+## Serial capture (no TTY here)
+```
+~/.local/pipx/venvs/meshtastic/bin/python -c "import serial,time; s=serial.Serial('/dev/cu.usbmodem101',115200,timeout=1); t=time.time()
+while time.time()-t<30:
+ l=s.readline().decode('utf-8','replace').rstrip()
+ if l: print(l)
+s.close()"
+```
+Decode backtrace: `~/.platformio/packages/toolchain-xtensa-esp-elf/bin/xtensa-esp32s3-elf-addr2line -pfiaC -e .pio/build/<env>/*.elf <addrs>`
+Flash needs manual download mode (hold BOOT, tap RST) when device is bootlooping.
