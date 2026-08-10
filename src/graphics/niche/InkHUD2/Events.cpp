@@ -3,6 +3,7 @@
 * PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 */
 #include "Events.h"
+#include "Setup.h"  // alertsEnabled
 #include "InkHUD2.h"
 #include "Modules/MessageModule.h"
 #include "Modules/BatteryModule.h"
@@ -225,6 +226,14 @@ int Events::onReceiveTextMessage(const meshtastic_MeshPacket* packet) {
 
     // Update message module
     messageModule->setMessage(packet->from, msgText, channel, timestamp);
+
+    // Per-channel / DM alert: only force a FULL refresh (grab attention) if alerts are enabled for this
+    // channel/DM. When off, the message still lands in its tab but doesn't interrupt with a refresh.
+    // (Previously alertsEnabled was never read — the Alerts toggles did nothing.)
+    uint8_t alertIdx = (channel == CHANNEL_DM) ? 8 : (channel < 8 ? channel : 0);
+    if (alertsEnabled[alertIdx]) {
+        InkHUD2::instance().requestFullRefresh();
+    }
 
     return 0;  // Continue notifying other observers
 }

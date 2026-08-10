@@ -48,8 +48,9 @@ static const char* rotationOptions4[] = {"0", "90", "180", "270"};  // For squar
 static const char* rotationOptions2[] = {"0", "180"};               // For elongated screens
 static bool isElongatedScreen = false;  // Set in setup() based on aspect ratio
 
-// Alerts state (index 0-7 = channels, 8 = DM)
-static bool alertsEnabled[9] = {true, true, true, true, true, true, true, true, true};
+// Alerts state (index 0-7 = channels, 8 = DM). Non-static so Events can read it when a message arrives
+// (previously the toggles were dead — read nowhere). Declared extern in Setup.h.
+bool alertsEnabled[9] = {true, true, true, true, true, true, true, true, true};
 
 // Menu callbacks
 static std::function<void()> actionPing;

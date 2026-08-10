@@ -48,4 +48,7 @@ struct Config {
  */
 void setup(NicheGraphics::Drivers::EInk* driver, const Config& config);
 
+// Per-channel + DM alert toggles (index 0-7 = channels, 8 = DM). Read by Events when a message arrives.
+extern bool alertsEnabled[9];
+
 } // namespace InkHUD2
