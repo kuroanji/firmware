@@ -233,7 +233,7 @@ build_flags =
 | `variants/nrf52840/t-echo-plus/nicheGraphics.h` | Simplified to device-specific config only |
 | `variants/nrf52840/t-echo-plus/platformio.ini` | Added `t-echo-plus-inkhud2` env |
 | `variants/nrf52840/heltec_mesh_pocket/nicheGraphics.h` | Added InkHUD2 support with idle maintenance |
-| `variants/nrf52840/heltec_mesh_pocket/platformio.ini` | Added `heltec-mesh-pocket-qi2-inkhud2` env |
+| `variants/nrf52840/heltec_mesh_pocket/platformio.ini` | Added `heltec-mesh-pocket-qi2-10000-inkhud2` + `-5000-inkhud2` envs (shared base; battery-% calibration) |
 
 ### Variant Files (ESP32-S3)
 
@@ -310,7 +310,8 @@ All files under:
 |-------------|----------|--------|
 | `t-echo-inkhud2` | nRF52840 | LilyGo T-Echo |
 | `t-echo-plus-inkhud2` | nRF52840 | LilyGo T-Echo Plus |
-| `heltec-mesh-pocket-qi2-inkhud2` | nRF52840 | Heltec Mesh Pocket Qi2 |
+| `heltec-mesh-pocket-qi2-10000-inkhud2` | nRF52840 | Heltec Mesh Pocket Qi2 (10000mAh) |
+| `heltec-mesh-pocket-qi2-5000-inkhud2` | nRF52840 | Heltec Mesh Pocket Qi2 (5000mAh) |
 | `heltec-vision-master-e290-inkhud2` | ESP32-S3 | Heltec Vision Master E290 |
 | `heltec-vision-master-e213-inkhud2` | ESP32-S3 | Heltec Vision Master E213 |
 | `heltec-wireless-paper-inkhud2` | ESP32-S3 | Heltec Wireless Paper |
@@ -321,7 +322,8 @@ All files under:
 # nRF52840 devices (produces .uf2 file)
 pio run -e t-echo-inkhud2
 pio run -e t-echo-plus-inkhud2
-pio run -e heltec-mesh-pocket-qi2-inkhud2
+pio run -e heltec-mesh-pocket-qi2-10000-inkhud2
+pio run -e heltec-mesh-pocket-qi2-5000-inkhud2
 
 # ESP32-S3 devices (produces .factory.bin file)
 pio run -e heltec-vision-master-e290-inkhud2

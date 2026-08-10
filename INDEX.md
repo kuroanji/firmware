@@ -1,7 +1,14 @@
 # INDEX — InkHUD2 firmware (code)
 
 > **Read FIRST.** InkHUD2 — a niche e-ink UI for Meshtastic, targeting all supported e-ink devices (nRF52840 + ESP32-S3). This is the navigator + operational handbook; deep detail lives in code, `ARCHITECTURE.md`, and linked docs.
-> **Last updated:** 2026-07-18 (added ThinkNode M1 target ✅ HW-verified; **fixed pre-existing protobuf drift that broke ALL InkHUD2 builds** since the 2.8.0 base bump — see below; HW/version facts are point-in-time — verify against current code before asserting).
+> **Last updated:** 2026-08-10. Recent: **rebased onto fresh upstream `6eac181`** (root-fixed the T3-S3
+> radio-reconfigure crash — old base had drifted behind upstream radio/NodeDB refactors; all 9 envs build,
+> T3-S3 + T1000-E HW-verified — see `REBASE_STATUS.md`); **Qi2 env split into 10000/5000mAh** (correct
+> battery-% calibration via `HELTEC_MESH_POCKET_BATTERY_*`; shared base section); **T3-S3 e-paper target**
+> (`tlora-t3s3-epaper-inkhud2`) + shutdown-freeze fix (`waitUntilIdle`); **Alerts fixed** — the per-channel/
+> DM notification toggles were a dead stub (read nowhere); Events now reads `alertsEnabled` and only
+> forces a refresh when the channel/DM alert is on. (HW/version facts are point-in-time — verify against
+> current code before asserting.)
 
 ## 🔴 Protobuf drift after 2.8.0 base bump — FIXED 2026-07-18
 InkHUD2 **did not compile at all** (any target) after the base was updated to Meshtastic
@@ -38,7 +45,9 @@ Files: `InkHUD2/Events.cpp`, `Modules/BootModule.cpp`, `Modules/MenuModule.cpp`,
 # nRF52840 → produces .uf2
 pio run -e t-echo-inkhud2
 pio run -e t-echo-plus-inkhud2
-pio run -e heltec-mesh-pocket-qi2-inkhud2
+pio run -e heltec-mesh-pocket-qi2-10000-inkhud2   # Qi2 with 10000mAh battery
+pio run -e heltec-mesh-pocket-qi2-5000-inkhud2    # Qi2 with 5000mAh battery
+pio run -e tlora-t3s3-epaper-inkhud2   # LilyGo T3-S3 e-paper 2.13" (ESP32-S3)
 pio run -e tracker-t1000-e   # SenseCAP T1000-E (no screen; backup + i2c-rescue build, see T1000-E section)
 pio run -e thinknode_m1-inkhud2   # Elecrow ThinkNode M1 (see docs/PORT_THINKNODE_M1.md)
 
@@ -59,10 +68,12 @@ pio run -e heltec-wireless-paper-inkhud2
 |---|---|---|---|
 | `t-echo-inkhud2` | LilyGo T-Echo | nRF52840 | 1.54" 200×200 |
 | `t-echo-plus-inkhud2` | LilyGo T-Echo Plus | nRF52840 | 1.54" 200×200 |
-| `heltec-mesh-pocket-qi2-inkhud2` | Heltec Mesh Pocket Qi2 | nRF52840 | 2.13" 122×250 |
+| `heltec-mesh-pocket-qi2-10000-inkhud2` | Heltec Mesh Pocket Qi2 (10000mAh) | nRF52840 | 2.13" 122×250 |
+| `heltec-mesh-pocket-qi2-5000-inkhud2` | Heltec Mesh Pocket Qi2 (5000mAh) | nRF52840 | 2.13" 122×250 |
 | `heltec-vision-master-e290-inkhud2` | Heltec VM E290 | ESP32-S3 | 2.9" 128×296 |
 | `heltec-vision-master-e213-inkhud2` | Heltec VM E213 | ESP32-S3 | 2.13" 250×122 |
 | `heltec-wireless-paper-inkhud2` | Heltec Wireless Paper | ESP32-S3 | 2.13" 250×122 |
+| `tlora-t3s3-epaper-inkhud2` | LilyGo T3-S3 e-paper | ESP32-S3 | 2.13" 250×122 |
 | `tracker-t1000-e` | Seeed SenseCAP T1000-E | nRF52840 | **none** (tracker; built from this tree for backup + i2c fix, NOT an InkHUD UI target) |
 | `thinknode_m1-inkhud2` | Elecrow ThinkNode M1 | nRF52840 | 1.54" 200×200 (same panel as T-Echo) — ✅ verified on HW; rotation **0**; front light **auto-off after 30 s idle** (`backlightIdleOffMs`, core feature) → aux button = scroll. Bootloader vol `ELECROWBOOT`. → `docs/PORT_THINKNODE_M1.md` |
 

@@ -68,6 +68,15 @@ View your GPS position with compass:
 
 Access: Map → Long press → My Position
 
+### 7. Per-Channel Alerts
+
+Per-channel + DM notification toggles. When a message arrives, InkHUD2 only forces an attention
+(FULL) refresh if alerts are enabled for that channel/DM — otherwise the message lands quietly in its
+tab without interrupting. Previously the toggles existed but were read nowhere (a dead stub); Events
+now actually reads `alertsEnabled` on each incoming message.
+
+Access: Menu → Alerts → toggle per channel / DM
+
 ---
 
 ## Architecture
@@ -210,6 +219,10 @@ Button mapping for Wireless Paper:
 
 ### Heltec Mesh Pocket Qi2 Notes
 
+- **Battery variants** — two envs: `heltec-mesh-pocket-qi2-10000-inkhud2` (10000mAh) and
+  `heltec-mesh-pocket-qi2-5000-inkhud2` (5000mAh). Both share one base section; they differ only by
+  `HELTEC_MESH_POCKET_BATTERY_10000` / `_5000` for correct charge-% calibration — flash the one matching
+  the installed battery. (Qi2 supports both wireless and wired charging.)
 - **Screen: 122x250** — 2.13" e-ink (LCMEN2R13ECC1, SSD1680 controller)
 - **Landscape orientation** — rotation = 3 (250x122 logical)
 - **Single button** — no Aux button, no backlight
