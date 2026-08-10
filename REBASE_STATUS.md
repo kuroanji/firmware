@@ -56,8 +56,21 @@ cherry-port our layer file-by-file, fixing base-API drift as it surfaces.
 Commits on `rebase/inkhud2-on-6eac181`: 44627d0 → f9bc109 → 7fb5437 → 9df45b5.
 All 9 envs build; T3-S3 HW-verified (radio-reconfigure crash gone).
 
-## REMAINING (non-firmware, optional)
-- **tooling**: mcp-server/, docs/, .claude/, INDEX.md — doesn't affect firmware builds. Port last.
+## DONE ✅ — tooling @ 16bb79f + display fixes @ 51f3ba20b
+- tooling (docs/mcp-server/.claude/INDEX) ported — non-firmware.
+- **Shutdown freeze fix (all InkHUD2 targets):** shutdown cut power mid-refresh (fixed delay(500)
+  after async update) → froze half-drawn frame on slow panels. Added DisplayDriver::waitUntilIdle()
+  (→ EInk::await()), block on it in MenuModule startShutdown/showShutdownScreen. HW-confirmed on T3-S3.
+- **DEPG0213BNS800:** FULL min-wait 3500→2000ms. (Border single-blink tried & reverted: ghosting.)
+- FULL-refresh slowness itself is the panel's OTP 0xF7 waveform (busy-bound) — not software-fixable
+  without ghosting risk. To reduce *frequency* of the slow blink, tune idleFullRefreshMs if desired.
+
+## ✅✅✅ FULLY DONE & VERIFIED
+Final rebuild after shutdown fix: **all 9 envs SUCCESS, 0 errors.**
+Commits on `rebase/inkhud2-on-6eac181`: 44627d0 f9bc109 7fb5437 9df45b5 16bb79f 51f3ba20b.
+HW-verified on T3-S3: boots, BLE, screen/menu, radio-reconfigure crash gone, clean shutdown.
+Backup intact: branch backup/pre-rebase-2026-08-09 + tar in /Users/mysinpyu/Claude/.
+NEXT (user): merge rebase/inkhud2-on-6eac181 into update-inkhud2 after release flashing.
 
 ## TODO (ordered)
 1. **backup/restore** → merge into 6eac181 NodeDB: `backupNodeDatabase()`, `corruptSettingsMask`,
